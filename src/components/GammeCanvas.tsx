@@ -3,6 +3,8 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch, updatePosition } from '../store';
 import carImage from '../assets/images/CHQ_Patrol_Car.png';
 import cityImage from '../assets/images/city.png';
+import { ObstacleCar, generateObstacleCar } from '../components/ObstacleCar';
+import obstacleCarImage from '../assets/images/carobstacle.png';
 
 interface GameCanvasProps {
   width: number;
@@ -14,9 +16,20 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ width, height }) => {
   const dispatch = useDispatch<AppDispatch>();
   const playerX = useSelector((state: RootState) => state.playerX);
   const playerY = useSelector((state: RootState) => state.playerY);
-  
-  const [carWidth, setCarWidth] = useState(200);
-  const [carHeight, setCarHeight] = useState(150);
+
+  const carWidth = 200;
+  const carHeight = 150;
+  const [speed, setSpeed] = useState(0);
+  const [targetSpeed, setTargetSpeed] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [obstacleCars, setObstacleCars] = useState<ObstacleCar[]>([]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setObstacleCars(prevCars => [...prevCars, generateObstacleCar(width)]);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [width]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -25,69 +38,98 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ width, height }) => {
     const context = canvas.getContext('2d');
     if (!context) return;
 
-    // Définir le fond du canvas en #4CAF50
-    context.fillStyle = '#4CAF50';
-    context.fillRect(0, 0, canvas.width, canvas.height);
-
     const car = new Image();
     car.src = carImage;
 
     const cityImg = new Image();
     cityImg.src = cityImage;
 
-    car.onload = () => {
-      setCarWidth(car.width);
-      setCarHeight(car.height);
+    const obstacleCar = new Image();
+    obstacleCar.src = obstacleCarImage;
 
-      const render = () => {
-        if (!canvas) return;
-        context.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // Dessiner le fond en #4CAF50
-        context.fillStyle = '#4CAF50';
-        context.fillRect(0, 0, canvas.width, canvas.height);
+    const render = () => {
+      if (!canvas) return;
+      context.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Dessiner la route en perspective
-        drawPerspectiveRoad(context, canvas.width, canvas.height);
+      // Dessiner le fond
+      context.fillStyle = '#4CAF50';
+      context.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Dessiner l'horizon avec l'image de la ville
-        context.drawImage(cityImg, 0, 0, canvas.width, 100);
+      // Dessiner la route en perspective
+      drawPerspectiveRoad(context, canvas.width, canvas.height);
 
-        // Dessiner la voiture
-        const carX = playerX + (carWidth / 2) - 75; // Centre de la voiture
-        const carY = canvas.height - carHeight - 10; // Position verticale au-dessus de la route
-        context.drawImage(car, carX, carY, carWidth, carHeight);
+      // Dessiner l'horizon avec l'image de la ville
+      context.drawImage(cityImg, 0, 0, canvas.width, 100);
 
-        requestAnimationFrame(render);
-      };
+      // Ajuster la vitesse
+      if (speed < targetSpeed) {
+        setSpeed(speed + (targetSpeed / 300));
+      } else if (speed > targetSpeed) {
+        setSpeed(speed - (targetSpeed / 300));
+      }
 
-      render();
+      // Mettre à jour le décalage
+      setOffset(prevOffset => (prevOffset + speed * 0.5) % 20);
+
+      // Mettre à jour et dessiner les voitures obstacles
+      const updatedCars = obstacleCars
+        .map(car => ({
+          ...car,
+          y: car.y + car.speed,
+        }))
+        .filter(car => car.y < height);
+
+      updatedCars.forEach(car => {
+        const scale = 1 + (car.y / canvas.height);
+        const newWidth = car.width * scale;
+        const newHeight = car.height * scale;
+        const newX = car.x + (car.width - newWidth) / 2;
+
+        context.drawImage(obstacleCar, newX, car.y, newWidth, newHeight);
+      });
+
+      setObstacleCars(updatedCars); // Update state with new positions
+
+      // Dessiner la voiture du joueur
+      const carX = playerX + (carWidth / 2) - 75;
+      const carY = canvas.height - carHeight - 10;
+      context.drawImage(car, carX, carY, carWidth, carHeight);
+
+      // Vérifier les collisions
+      updatedCars.forEach(obstacleCar => {
+        if (checkCollision(carX, carY, carWidth, carHeight, obstacleCar.x, obstacleCar.y, obstacleCar.width, obstacleCar.height)) {
+          console.log("Collision!");
+          // Ajoutez ici la logique de fin de jeu ou de perte de vie
+        }
+      });
+
+      requestAnimationFrame(render);
     };
+
+    car.onload = () => render();
+    obstacleCar.onload = () => render(); // Ensure obstacles are rendered when their image loads
 
     return () => {
       car.onload = null;
+      obstacleCar.onload = null;
     };
-  }, [playerX, playerY, carWidth, carHeight]);
+  }, [playerX, playerY, carWidth, carHeight, speed, targetSpeed, obstacleCars]);
 
   const drawPerspectiveRoad = (ctx: CanvasRenderingContext2D, canvasWidth: number, _canvasHeight: number) => {
-    // Dimensions de la route en perspective
-    const topWidth = 200; // Largeur en haut du trapeze
-    const bottomWidth = 800; // Largeur en bas du trapeze
-    const height = 500; // Hauteur du trapeze
-  
-    // Coordonnées du trapeze
+    const topWidth = 200;
+    const bottomWidth = 800;
+    const height = 500;
+
     const topX = (canvasWidth - topWidth) / 2;
     const topY = 100;
     const bottomX1 = (canvasWidth - bottomWidth) / 2;
     const bottomX2 = bottomX1 + bottomWidth;
     const bottomY = topY + height;
 
-    // Dégradé de la route (gris foncé)
     const gradient = ctx.createLinearGradient(topX, topY, bottomX1, bottomY);
-    gradient.addColorStop(0, '#666'); // Début du dégradé
-    gradient.addColorStop(1, '#333'); // Fin du dégradé
+    gradient.addColorStop(0, '#666');
+    gradient.addColorStop(1, '#333');
 
-    // Dessin du trapeze de la route
     ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.moveTo(topX, topY);
@@ -97,23 +139,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ width, height }) => {
     ctx.closePath();
     ctx.fill();
 
-    // Dessin des bords de la route (vert)
-    ctx.fillStyle = '#4CAF50';
-    ctx.beginPath();
-    ctx.moveTo(topX, topY);
-    ctx.lineTo(bottomX1, bottomY);
-    ctx.lineTo(bottomX1, bottomY + 20); // Hauteur des bords
-    ctx.lineTo(topX, topY + 20); // Hauteur des bords
-    ctx.closePath();
-    ctx.fill();
+    const tileWidth = 20;
+    const tileHeight = 10;
+    for (let y = topY - offset; y < bottomY; y += tileHeight) {
+      const lerp = (y - topY) / (bottomY - topY);
+      const x1 = topX + lerp * (bottomX1 - topX);
+      const x2 = topX + topWidth + lerp * (bottomX2 - (topX + topWidth));
 
-    ctx.beginPath();
-    ctx.moveTo(topX + topWidth, topY);
-    ctx.lineTo(bottomX2, bottomY);
-    ctx.lineTo(bottomX2, bottomY + 20); // Hauteur des bords
-    ctx.lineTo(topX + topWidth, topY + 20); // Hauteur des bords
-    ctx.closePath();
-    ctx.fill();
+      ctx.fillStyle = (Math.floor((y + offset) / tileHeight) % 2 === 0) ? 'red' : 'white';
+      ctx.fillRect(x1 - tileWidth, y, tileWidth, tileHeight);
+      ctx.fillRect(x2, y, tileWidth, tileHeight);
+    }
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -124,18 +160,37 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ width, height }) => {
       case 'ArrowRight':
         dispatch(updatePosition(Math.min(playerX + 10, width - carWidth), playerY));
         break;
-      default:
+      case 'ArrowUp':
+        setTargetSpeed(100);
+        break;
+      case 'ArrowDown':
+        setTargetSpeed(0);
         break;
     }
   };
 
+  const handleKeyUp = (e: KeyboardEvent) => {
+    if (e.key === 'ArrowUp') {
+      setTargetSpeed(0);
+    }
+  };
+
+  const checkCollision = (x1: number, y1: number, w1: number, h1: number, x2: number, y2: number, w2: number, h2: number) => {
+    return x1 < x2 + w2 &&
+           x1 + w1 > x2 &&
+           y1 < y2 + h2 &&
+           y1 + h1 > y2;
+  };
+
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [playerX, playerY, dispatch]);
+  }, [playerX, playerY, speed, dispatch]);
 
   return <canvas ref={canvasRef} width={width} height={height} />;
 };
