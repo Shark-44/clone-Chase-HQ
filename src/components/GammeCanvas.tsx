@@ -23,13 +23,23 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ width, height }) => {
   const [targetSpeed, setTargetSpeed] = useState(0);
   const [offset, setOffset] = useState(0);
   const [obstacleCars, setObstacleCars] = useState<ObstacleCar[]>([]);
+  const [spawnInterval, setSpawnInterval] = useState(1000); // 3 secondes par défaut
 
+  // reglage vitesse apparition des voitures obstacle
   useEffect(() => {
     const interval = setInterval(() => {
       setObstacleCars(prevCars => [...prevCars, generateObstacleCar(width)]);
-    }, 3000);
+    }, spawnInterval); // Utilise l'intervalle défini dans l'état
     return () => clearInterval(interval);
-  }, [width]);
+  }, [width, spawnInterval]);
+
+  useEffect(() => {
+    if (speed > 50) {
+      setSpawnInterval(500); // Réduire l'intervalle si la vitesse est élevée
+    } else {
+      setSpawnInterval(1000); // Rétablir l'intervalle par défaut
+    }
+  }, [speed]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -78,9 +88,16 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ width, height }) => {
           y: car.y + car.speed,
         }))
         .filter(car => car.y < height);
-
+      // scale des voitures obstacles
       updatedCars.forEach(car => {
-        const scale = 1 + (car.y / canvas.height);
+        const minY = 100;
+        const maxY = 600;
+        const minScale = 0.4;
+        const maxScale = 1;
+
+        const lerp = (car.y - minY) / (maxY - minY);
+        const scale = Math.max(minScale, Math.min(maxScale, minScale + lerp * (maxScale - minScale)));
+
         const newWidth = car.width * scale;
         const newHeight = car.height * scale;
         const newX = car.x + (car.width - newWidth) / 2;
@@ -94,6 +111,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ width, height }) => {
       const carX = playerX + (carWidth / 2) - 75;
       const carY = canvas.height - carHeight - 10;
       context.drawImage(car, carX, carY, carWidth, carHeight);
+
+      // Afficher la vitesse de la voiture
+      context.font = "30px 'Black Ops One'";
+      context.fillStyle = 'white';
+      context.fillText("Speed:", 25, 150);
+      context.fillText(`${Math.floor(speed * 2.7)} km/h`, 25, 185);
 
       // Vérifier les collisions
       updatedCars.forEach(obstacleCar => {

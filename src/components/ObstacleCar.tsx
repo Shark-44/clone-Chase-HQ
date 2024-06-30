@@ -1,46 +1,25 @@
 // ObstacleCar.tsx
-import React from 'react';
-import carImage from '../assets/images/carobstacle.png'; // Utilisez une image différente si vous le souhaitez
 
-export type ObstacleCar = {
-  id: number;
+export interface ObstacleCar {
   x: number;
   y: number;
   width: number;
   height: number;
   speed: number;
-};
-
-interface ObstacleCarProps {
-  car: ObstacleCar;
-  canvasHeight: number;
 }
 
-export const ObstacleCarComponent: React.FC<ObstacleCarProps> = ({ car, canvasHeight }) => {
-  const scale = 1 + (car.y / canvasHeight);
-  const newWidth = car.width * scale;
-  const newHeight = car.height * scale;
-  const newX = car.x + (car.width - newWidth) / 2;
+export const generateObstacleCar = (_canvasWidth: number): ObstacleCar => {
+  const width = 200; // largeurs des voitures obstacles
+  const height = 150; // hauteurs des voitures obstacles
+  const x = 200 + Math.random() * (800 - 300 - width);
+  const y = 100; // Changer ici pour que les voitures commencent à y = 100
+  const speed = Math.random() * 2 + 1; // Vitesse aléatoire
 
-  return (
-    <img
-      src={carImage}
-      style={{
-        position: 'absolute',
-        left: `${newX}px`,
-        top: `${car.y}px`,
-        width: `${newWidth}px`,
-        height: `${newHeight}px`,
-      }}
-    />
-  );
+  return {
+    x,
+    y,
+    width,
+    height,
+    speed
+  };
 };
-
-export const generateObstacleCar = (width: number): ObstacleCar => ({
-  id: Math.random(),
-  x: Math.random() * (width - 100),
-  y: -100,
-  width: 100,
-  height: 75,
-  speed: Math.random() * 2 + 1,
-});
